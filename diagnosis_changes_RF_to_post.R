@@ -1,4 +1,8 @@
+#Program 2 to predict new mental health diagnosis among those who were never diagnosed with mental health problems
+#subsetting was done later, imputation was done using everyone's data to maximize power
+
 #load data
+#Load packages
 library(sas7bdat)
 library(tableone)
 library(naniar)
@@ -14,8 +18,7 @@ library(dplyr)
 library(stats)
 library(epiR)
 library(pROC)
-# library (BMA)
-# library (iterativeBMA)
+
 
 ##PART 2 ANALYSIS - new diagnosis of mental health problems
 
@@ -24,7 +27,7 @@ library(pROC)
 #disability
 #treat_comorbid
 # drug_12m
-#mental health conditions cannot be used
+#mental health conditions cannot be used, since nobody has mental health conditions previously, so these predictors were not added, unlike program 1
 
 #Combine two spirit and questioning, as these are too small (made as other)
 dat <- dat %>% mutate(curr_orient3 = ifelse(curr_orient2 %in% c(7,8),7,curr_orient2)) %>%
@@ -97,8 +100,7 @@ dat1.hd <- dat_vars
 table(dat1.hd$diagnosis)
 ftable(dat1.hd$diagnosis,dat1.hd$diagnosis_1)
 
-#We probably want to use everyone's information to impute, but later only include those who weren't diagnosed
-
+#We want to use everyone's information to impute, but later only include those who weren't diagnosed
 dat1.hd <- dat1.hd %>% select(-c(diagnosis))
 
 library(mice)
@@ -115,7 +117,6 @@ imputed.hd <- mice(dat1.hd, method='pmm', predictorMatrix=predM, m=5)
 summary(imputed.hd)
 
 # dat1.hd<-subset(dat1.hd,diagnosis != 1)
-
 # select the first copy
 df1 <- complete(imputed.hd,1)
 df2 <- complete(imputed.hd,2)
@@ -124,7 +125,6 @@ df4 <- complete(imputed.hd,4)
 df5 <- complete(imputed.hd,5)
 
 #Create function to impute data on the data frames
-
 scalevars <- function(df) {
   df <- df %>% mutate(cen_identity = select(.,central:understand) %>% rowSums(na.rm=TRUE))
   df <- df %>% mutate(outness = select(.,mom:teach) %>% rowMeans(na.rm=TRUE)) 
@@ -165,13 +165,10 @@ df4<-subsetdiag(df4)
 df5<-subsetdiag(df5)
 
 #predict rf with eval in a test set
-
 #Just to check the frequencies
 
 lapply(df1,function(i) {
   table(i, useNA="ifany")})
-
-##Conditions, drugs, disabilities, some are too low, so maybe better to combine them (also same with CES-D to make it easier?)
 
 evalrf <- function(df) {
   splitIndex <- createDataPartition(df$diagnosis_1,p=0.8,times=1,list=FALSE)
@@ -261,7 +258,6 @@ corrplot(mtx_cor, is.corr=FALSE, method="circle", na.label=" ")
 ####partial dependence of top 10 correlates
 ##See from imp1
 
-#which class specifies which class to be focused on in classification problems, the default is the first class (i.e column 1, or column 2)
 pdp_continuous <- function(variable,xvar,label) {
   pdp.partial <- partial(rf.sh, xvar,which.class=2)
   pdp.plot <- plotPartial(pdp.partial,  xlab= label, ylab= 'PD')
@@ -283,12 +279,6 @@ library(ggpubr)
 
 ggarrange(pdp1,pdp2,pdp3,pdp4,pdp5,pdp6,pdp7,pdp8,pdp9,pdp10,
           ncol = 5, nrow = 2)
-
-#binary only one variable, so we dont need to create another function
-# pdp.mentalhealth <- partial(rf1[[1]], "mental_health", which.class= 2)
-# pdp.mentalhealth$mental_health <- factor(pdp.mentalhealth$mental_health, levels = c(0,1), labels= c('Poor or fair', 'Good or excellent'))
-# pdp.mentalhealth.p <- plotPartial(pdp.mentalhealth,  xlab= 'Mental health', ylab= 'PD')
-# print(pdp.mentalhealth.p)
 
 demovars<-c('age','curr_orient2','gender','ethnicity','education', 'employ','house_income', 'where_live')
 
@@ -357,7 +347,6 @@ write.xlsx(intall4, file="intall2_OCT6.xlsx", sheetName="sheet1a")
 
 ###Do the LASSO
 
-###Some were comparing NAs
 library(glmnet)
 
 lasso <- function(df) {
@@ -437,7 +426,5 @@ print(tab,quote=TRUE,noSpaces=TRUE)
 
 library(xlsx)
 write.xlsx(tab2, file="dem344.xlsx", sheetName="sheet1a")
-
-#Consider Interactions with LASSO
 
 
