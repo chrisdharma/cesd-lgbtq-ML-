@@ -1,4 +1,7 @@
+#Program to predict CESD scores at 1 year follow up for LGBTQ youth smoking using random forest and LASSO using baseline predictors
+
 #load data
+#load library
 library(tableone)
 library(naniar)
 library(ggplot2)
@@ -35,17 +38,13 @@ culture,mentalill,drinker,streetdrug,jail,divorce,slap,
 beat,swear,inapptouch,inapptouchyou,forced,employ,ethnicity))
 
 summary(dat_vars)
-# dat_fin <- na.omit(dat_vars)
 
 dat_vars[sapply(dat_vars, is.nan)] <- NA
 
 lapply(dat_vars,function(i) {
   table(i, useNA="ifany")})
 
-#now no more variables has NaN.
-
-#50% missing is when it's unusable according to Aya and no variables have > 50% missing
-##Some variables have NaN instead of NA, let's transform those to NA
+#Check to make sure all variable frequencies look okay
 
 ##missing data
 sapply(dat_vars, function(x) sum(is.na(x)))
@@ -89,10 +88,6 @@ dat1.hd <- dat_vars
 
 #retaining unimputed dataset as dat.hd
 
-##seek help and mental health are very important, which makes sense, so we can stratify based on seekhelp
-###Need to do the imputation to ensure adequate sample sizes
-
-#From the older codes
 #using mice for data imputation
 library(mice)
 init <- mice(dat1.hd, maxit=0) 
@@ -111,10 +106,8 @@ df2 <- complete(imputed.hd,2)
 df3 <- complete(imputed.hd,3)
 df4 <- complete(imputed.hd,4)
 df5 <- complete(imputed.hd,5)
-#check out the MICE package guide, with complete function, it gives a lot of warning too!
 
 #Create function to scale the data on the data frames
-
 scalevars <- function(df) {
   sapply(df, function(x) sum(is.na(x)))
   df <- df %>% mutate(cen_identity = select(.,central:understand) %>% rowSums(na.rm=TRUE))
@@ -135,7 +128,6 @@ scalevars <- function(df) {
 }
 
 # https://towardsdatascience.com/how-data-normalization-affects-your-random-forest-algorithm-fbc6753b4ddf
-
 df1<-scalevars(df1)
 df2<-scalevars(df2)
 df3<-scalevars(df3)
@@ -203,6 +195,7 @@ rf5<-evalrf(df5)
 importance(rf5)
 rf5[[2]]
 
+#The best performing was df1, was we'll save df1
 df<-df1
 rf.sh<-rf1[[1]]
 importance(rf1)
@@ -230,8 +223,7 @@ corrplot(mtx_cor, is.corr=FALSE, method="circle", na.label=" ")
 ####partial dependence of top 10 correlates
 ##See from imp1
 
-#So everything is continuous except mental_health
-#Read up on what PDP are, partial dependence 
+#So everything is continuous
 pdp_continuous <- function(variable,xvar,label) {
   pdp.partial <- partial(rf.sh, xvar)
   pdp.plot <- plotPartial(pdp.partial,  xlab= label, ylab= 'PD')
@@ -250,52 +242,10 @@ pdp8<-pdp_continuous(variable=mental_health,xvar='mental_health', label = 'self-
 pdp9<-pdp_continuous(variable=phobia,xvar='phobia',label = 'internalized homophobia')
 pdp10<-pdp_continuous(variable=age,xvar='age',label = 'age')
 
-# #binary only one variable, so we dont need to create another function
-# pdp.mentalhealth <- partial(rf1[[1]], "mental_health", which.class= 2)
-# pdp.mentalhealth$mental_health <- factor(pdp.mentalhealth$mental_health, levels = c(0,1), labels= c('Poor or fair', 'Good or excellent'))
-# pdp.mentalhealth.p <- plotPartial(pdp.mentalhealth,  xlab= 'Mental health', ylab= 'PD')
-
 library(ggpubr)
 
 ggarrange(pdp1,pdp2,pdp3,pdp4,pdp5,pdp6,pdp7,pdp8,pdp9,pdp10,
           ncol = 5, nrow = 2)
-
-# str(df1[,c("province","curr_orient2","curr_gender","trans","intersex","ethnicity",
-#          "poc","residence","education","house_income","ind_income","rural_city",
-#          "where_live","fitness1","gen_health","mental_health","stresslife","diagnosis",
-#          "con_eating","con_anxiety","con_ADD","con_ADHD","con_depression","con_bipolar",
-#           "con_OCD","con_panic","con_PTSD","con_others","cigs_smoked","curr_smoke","use_cigar","use_wp","use_smokeless","covid",
-#          "plan_quit","quit_attempts","tailored","quit_support","time_vape",
-#          "curr_vape","alcohol","alcohol_amount","cannabis","drug_12m",
-#          "substances_covid","seek_help","employ")])
-#panel of top 10 correlates
-# pdp.sh.categorical<- ggarrange(pdp.mentalhealth.p,pdp.suicidal.p,
-#                                labels= c('A', 'B'),
-#                                nrow=1)
-# print(pdp.sh.categorical)
-# 
-# pdp.sh.continuous <- ggarrange(pdp.outness.p, pdp.en_stigma.p,
-#                                pdp.phobia.p,  pdp.per_stigma.p,
-#                                pdp.connect_com.p, pdp.cen_identity.p, 
-#                                pdp.age.p, pdp.ace.p,
-#                                labels= c('C', 'D', 'E', 'F', 'G', 'H','I', 'J'),
-#                                nrow=2,ncol=4)
-# print(pdp.sh.continuous)
-# 
-# pdp.sh <- ggarrange(pdp.sh.categorical, pdp.sh.continuous,
-#                     ncol=1, heights= c(0.5, 1))
-# print(pdp.sh)
-
-################interactions
-#interaction strength between demographics
-
-# all_pairs<-combn(paste0(colnames(subset(df,select=-c(diff_cesd)))),m=2)
-# 
-# res <- NULL
-# for (i in seq_along(all_pairs)) {
-#   interact <- vint(rf.sh, feature_names = all_pairs[, i], n.trees = best_iter)
-#   res <- rbind(res, interact)
-# }
 
 demovars<-c('age','curr_orient2','gender','ethnicity','education', 'employ','house_income', 'where_live')
 
@@ -313,9 +263,6 @@ int.sh_plot <- ggplot(data=interact.sh,aes(reorder(Variables, Interaction), Inte
        x="Pairwise interaction")+
   theme_classic()
 print(int.sh_plot)
-
-#To interpret strong interactions, maybe can make it binary
-#curr_orient vs top 10 predictors
 
 interaction_top10 <- function(dem) {
 int1<-vint(rf.sh, feature_names = c(dem, 'connect_com'))
@@ -358,8 +305,6 @@ library(xlsx)
 write.xlsx(intall4, file="intall3_OCT6.xlsx", sheetName="sheet1a")
 
 ##Try the lasso
-
-###Some were comparing NAs
 library(glmnet)
 
 lasso <- function(df) {
@@ -380,7 +325,6 @@ plot(cv.lr)
 #lambda.1se will result in simpler model compared to lambda.min
 
 #Check prediction
-
 rmse1<-mean((y.test-predict(lr.mod, newx=x[-splitIndex,],s= c(cv.lr$lambda.min)))^2)
 coef.min1 <- coef(cv.lr, s ="lambda.min")
 i<-coef.min1@i #indexes of selected coefficients
@@ -428,7 +372,6 @@ library(xlsx)
 write.xlsx(tab2, file="dem.xlsx", sheetName="sheet1a")
 
 #Consider Interactions with LASSO
-
 splitIndex <- createDataPartition(df$cesd1_score,p=0.8,times=1,list=FALSE)
 # .*. include all ways interactions
 # .^2 include all pairwise interactions
