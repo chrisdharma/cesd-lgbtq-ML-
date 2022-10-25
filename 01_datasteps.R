@@ -1,4 +1,5 @@
-#load data
+#Program to clean data and perform some data manipulation from the LGBTQ+ Tobbaco survey. All subsequent ML analyses will be using the data saved from this program
+
 library(sas7bdat)
 library(tableone)
 library(naniar)
@@ -12,32 +13,19 @@ library(corrplot)
 library(pdp)
 library(dplyr)
 
-setwd("/Users/christofferdharma/Documents/CAMH-Chaiton")
 datold<-read.sas7bdat("baselinefup1.sas7bdat")
 
 str(datold)
 dim(datold)
 #1511 observations and 506 variables
 
-#Select participants who completed follow up survey, 
-##just first removing those who followup_complete1 is missing (which seems all NA)
+#Select participants who completed follow up survey AND baseline survey
 dat<- datold[!is.na(datold$followup1_complete),]
 dat<- dat[dat$baseline_complete==2,]
-#they have to complete both!
 
 dim(dat)
 
-table(dat$substances___12)
-table(dat$substances_1___12)
-
-CreateTableOne(strata=c("substances___12"),vars=c("substances_1___12"),factorVars = c("substances_1___12"),data = dat)
-
-CreateTableOne(strata=c("diagnosis"),vars=c("diagnosis_1"),factorVars = c("diagnosis_1"),data = dat)
-
-# dat2 <- dat %>% select(substances_1___12, substances___12)
-
-#Stratified by those who seek mental health services
-
+#Exploratory analyses of CESD data
 dat <- dat %>% mutate(select(.,c(feel1:feel7,feel1_1:feel7_1)) %>% replace_with_na_all(condition = ~.x == 5))
 
 count_na_func <- function(x) sum(is.na(x)) 
@@ -57,29 +45,7 @@ dat <- dat %>% mutate(cesd_score = ifelse(sum_na_cesd >= 2,NA,cesd_score),
 #Lowest is 1, so it cannot be all 0
 #if missing more than 10% (i.e more than 1 item), then scores cannot be used
 
-# check<-dat %>% filter(cesd_score ==4) %>% select(.,c(feel1:feel7,feel1_1:feel7_1))
-
 plot(cesd1_score ~ cesd_score,data=dat)
-
-# x <- dat %>% select(.,cesd_score,cesd1_score)
-# x <- na.omit(x)
-
-# tot.sse <- c()
-# 
-# for (i in 1:5){
-#   km.out <- kmeans(x,i,nstart=1)
-#   tot.sse[i] <- km.out$tot.withinss
-# }
-# plot(tot.sse,type="l")
-# 
-# #Maybe 2/3 is a good fit?
-# km.out2 <- kmeans(x,2,nstart=1)
-# km.out3 <- kmeans(x,3,nstart=1)
-# 
-# plot(x,col=4-km.out2$cluster)
-# plot(x,col=4-km.out3$cluster)
-#Not that useful, because the clusters only show those with low consistently low, mid consistently mid, etc
-#So possibly still best to use LASSO to select the variables or random forest, and read those PDP paper
 
 dat %>% summarise(n=n(),
                   mean_cesd=mean(cesd_score,na.rm=TRUE),
@@ -92,23 +58,10 @@ dat %>% summarise(n=n(),
                   max_cesd1=max(cesd1_score,na.rm=TRUE))
 
 ##https://www.listendata.com/2014/11/random-forest-with-r.html#id-1ed30f.
-#It doesnt make sense to predict them with a binary classifier, so we can do continuous outcome (methods such as RF)
+#It doesnt make sense to predict them with a binary classifier, since almost everybody seem to have depression, so we can do continuous outcome 
 
 t.test(dat$cesd_score, dat$cesd1_score, paired = TRUE, alternative = "two.sided")
 ###No significant difference between the two, which makes sense but the patterns of changes should be noted
-
-# t.test(dat2$diff_cesd ~ dat2$seek_help, var.equal=TRUE)
-
-#It does appear those who seek help have higher improvements (lower CESD scores) 
-#although CESD scores do get higher for some
-##Is this an effect modifier or just another correlate? Should we look at them separately?
-
-# Generally cut-off >= 8 / 9 has been used in other studies.
-# But this is really low! We can keep it continuous and do some type of latent trajectory analysis
-# or k-means?
-
-CreateTableOne(vars = c("followup1_complete"), data = datold, factorVars = c("followup1_complete"))
-#Only 926 completed follow up, I suppose the missing means they did not show up?
 
 #no NA values or no responses for don't know or prefer not to answer
 
@@ -161,11 +114,7 @@ NA -> dat$intersex[which(dat$intersex==3 | dat$intersex==4)]
 table(dat$poc)
 NA -> dat$poc[which(dat$poc==3)]
 0 -> dat$poc[which(dat$poc==2)]
-# 
-# 0 -> dat$suicidal[which(dat$suicidal==1)]
-# 1 -> dat$suicidal[which(dat$suicidal==2 | dat$suicidal==3 | dat$suicidal==4 | dat$suicidal==5)]
 NA -> dat$suicidal[which(dat$suicidal==6)]
-# dat$suicidal <- as.factor(dat$suicidal)
 
 #seek_help
 table(dat$seek_help)
@@ -184,16 +133,10 @@ dat$help_delay <- as.factor(dat$help_delay)
 
 #lifetime smoking and current smoking status
 table(dat$cigs_smoked)
-# 0 -> dat$cigs_smoked[which(dat$cigs_smoked==1 | dat$cigs_smoked==2 | dat$cigs_smoked==3 | dat$cigs_smoked==4 | dat$cigs_smoked==5 | dat$cigs_smoked==6)]
-# 1 -> dat$cigs_smoked[which(dat$cigs_smoked==7)]
 NA -> dat$cigs_smoked[which(dat$cigs_smoked==8)]
 # dat$cigs_smoked <- as.factor(dat$cigs_smoked)
 
 table(dat$curr_smoke,useNA="ifany")
-# 0 -> dat$curr_smoke[which(is.na(dat$curr_smoke))]
-# 2 -> dat$curr_smoke[which(dat$curr_smoke==2 | dat$curr_smoke==3)]
-# 3 -> dat$curr_smoke[which(dat$curr_smoke==4 | dat$curr_smoke==5)]
-# dat$curr_smoke <- as.factor(dat$curr_smoke)
 
 #dropping smoking variables not needed
 dat <- dat %>% select(-c(last_smoked: brand)) %>% select(-c(reason___1: cues___22))
@@ -271,7 +214,6 @@ table(dat$tailored)
 0-> dat$tailored[which(dat$tailored==2)]
 2-> dat$tailored[which(dat$tailored==3)]
 3 -> dat$tailored[which(is.na(dat$tailored))]
-#NA values are kept as seperate level 3 here
 dat$tailored <- as.factor(dat$tailored)
 
 summary(dat$quit_support)
@@ -346,9 +288,6 @@ dat$substances_covid[46] <- NA
 ##recoding health variables
 table(dat$gen_health)
 NA -> dat$gen_health[which(dat$gen_health==6 | dat$gen_health==7)]
-# 0 -> dat$gen_health[which(dat$gen_health==1 | dat$gen_health==2)]
-# 1 -> dat$gen_health[which(dat$gen_health==3 | dat$gen_health==4 | dat$gen_health==5)]
-# dat$gen_health <- as.factor(dat$gen_health)
 
 table(dat$fitness1)
 NA -> dat$fitness1[which(dat$fitness1==3)]
@@ -356,9 +295,6 @@ NA -> dat$fitness1[which(dat$fitness1==3)]
 
 table(dat$mental_health)
 NA -> dat$mental_health[which(dat$mental_health==6 | dat$mental_health==7)]
-# 0 -> dat$mental_health[which(dat$mental_health==1 | dat$mental_health==2)]
-# 1 -> dat$mental_health[which(dat$mental_health==3 | dat$mental_health==4 | dat$mental_health==5)]
-# dat$mental_health <- as.factor(dat$mental_health)
 
 table(dat$stresslife)
 dat$stresslife <- 6 - dat$stresslife
@@ -366,12 +302,6 @@ dat$stresslife <- 6 - dat$stresslife
 # 0 -> dat$stresslife[which(dat$stresslife==3 | dat$stresslife==4 | dat$stresslife==5)]
 # 1 -> dat$stresslife[which(dat$stresslife==1 | dat$stresslife==2)]
 # dat$stresslife <- as.factor(dat$stresslife)
-
-table(dat$suicidal)
-# 0 -> dat$suicidal[which(dat$suicidal==1)]
-# 1 -> dat$suicidal[which(dat$suicidal==2 | dat$suicidal==3 | dat$suicidal==4 | dat$suicidal==5)]
-NA -> dat$suicidal[which(dat$suicidal==6)]
-# dat$suicidal <- as.factor(dat$suicidal)
 
 table(dat$diagnosis)
 0 -> dat$diagnosis[which(dat$diagnosis==2)]
@@ -412,11 +342,6 @@ dat$disability <- 0
 NA -> dat$disability[which(dat$disability___10==1)]
 dat$disability <- as.factor(dat$disability)
 
-# dropping few health status variables not needed
-# dat <- dat %>% select(-c(fitness2, fitness_minutes)) %>% select(-c(disability___1 : disability___10))
-
-###Recode the variables 
-
 table(dat$residence)
 # 0 -> dat$residence[which(dat$residence<=4)]
 # 1 -> dat$residence[which(dat$residence==5)]
@@ -439,21 +364,12 @@ NA -> dat$employ[which(dat$employ___9==1)]
 dat <- select(dat, -c(employ___1:employ___9))
 
 table(dat$house_income)
-# 0 -> dat$house_income[which(dat$house_income<= 3)]
-# 1 -> dat$house_income[which(dat$house_income==4 | dat$house_income==5)]
-# 2 -> dat$house_income[which(dat$house_income==6)]
 NA -> dat$house_income[which(dat$house_income==7 | dat$house_income==8)]
 
 table(dat$ind_income)
-# 0 -> dat$ind_income[which(dat$ind_income<=3)]
-# 1 -> dat$ind_income[which(dat$ind_income==4 | dat$ind_income==5)]
-# 2 -> dat$ind_income[which(dat$ind_income==6)]
 NA-> dat$ind_income[which(dat$ind_income==7 | dat$ind_income==8)]
 
 table(dat$rural_city)
-# 1-> dat$rural_city[which(dat$rural_city<=3)]
-# 0-> dat$rural_city[which(dat$rural_city==4)]
-
 table(dat$where_live)
 0-> dat$where_live[which((dat$where_live>=1 & dat$where_live <= 9) | dat$where_live==12 | 
                            (dat$where_live>=15 & dat$where_live<=19))]
@@ -470,18 +386,14 @@ dat <- dat %>%
   mutate_at(.vars = vars(slap:forced), ~ recode(., '3' = '0','2' = '1', '1'='1',.default=NA_character_))
 
 ###Reverse coding for some variables
-
 #reversing not_sig variable
-
 ##Internalized homophobia variables
 #reverse coding comfrt, public, seen, public_plc, bars
-#Are all of these internalized homophobia? Doesnt feel like it?
-#But I suppose it's been validated? 
 
 dat[,c("not_sig","comfrt","public","seen","public_plc","bars")] = 6 -
   dat[,c("not_sig","comfrt","public","seen","public_plc","bars")]
 
-###Explore data
+###Explore data to see if seeking help at baseline creates a major difference in CESD-scores
 
 dat$receive_help <-
   case_when(
